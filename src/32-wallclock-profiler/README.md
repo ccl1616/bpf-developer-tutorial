@@ -377,7 +377,13 @@ By visualizing both types of time in a single flame graph with color coding, you
 
 Side notes:
 
-kill running test_combined with its PID
+- kill running test_combined with its PID
 ```
+# Find the PID first
+ps aux
 kill -TERM <pid>
+```
+- Use the demo script for testing program by
+```
+./demo.sh
 ```

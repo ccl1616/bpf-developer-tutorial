@@ -30,6 +30,63 @@ static void sig_handler(int sig)
 
 static blaze_symbolizer *symbolizer;
 
+static void print_histogram(struct offcputime_bpf *obj)
+{
+	struct key_t lookup_key = {}, next_key;
+	int err, fd_info;
+	struct val_t val;
+	int histogram[64] = {0}; // Support up to 2^63 microseconds
+	int max_bucket = 0;
+	int i;
+
+	fd_info = bpf_map__fd(obj->maps.info);
+	
+	/* Collect histogram data */
+	while (!bpf_map_get_next_key(fd_info, &lookup_key, &next_key)) {
+		err = bpf_map_lookup_elem(fd_info, &next_key, &val);
+		if (err < 0) {
+			fprintf(stderr, "failed to lookup info: %d\n", err);
+			return;
+		}
+		lookup_key = next_key;
+		if (val.delta == 0)
+			continue;
+
+		/* Calculate log2 bucket */
+		__u64 delta = val.delta;
+		int bucket = 0;
+		if (delta > 0) {
+			/* Find the highest set bit (log2) */
+			while (delta > 1) {
+				delta >>= 1;
+				bucket++;
+			}
+		}
+		
+		/* Cap at 63 to avoid array overflow */
+		if (bucket >= 64)
+			bucket = 63;
+			
+		histogram[bucket]++;
+		if (bucket > max_bucket)
+			max_bucket = bucket;
+	}
+
+	/* Print histogram */
+	printf("\nOff-CPU Time Histogram (log2 ranges in microseconds):\n");
+	printf("usecs               : count\n");
+	
+	for (i = 0; i <= max_bucket; i++) {
+		__u64 range_start = (i == 0) ? 0 : (1ULL << (i - 1));
+		__u64 range_end = (1ULL << i) - 1;
+		
+		printf("%-10llu -> %-10llu : %d\n", 
+		       (unsigned long long)range_start, 
+		       (unsigned long long)range_end, 
+		       histogram[i]);
+	}
+}
+
 static void print_map(struct offcputime_bpf *obj)
 {
 	struct key_t lookup_key = {}, next_key;
@@ -250,9 +307,13 @@ int main(int argc, char **argv)
 
 	symbolizer = blaze_symbolizer_new();
 	if (!symbolizer) {
+#ifdef NO_BLAZESYM
+		fprintf(stderr, "Warning: Symbolizer not available (NO_BLAZESYM), continuing without symbolization\n");
+#else
 		fprintf(stderr, "Failed to create a symbolizer\n");
 		err = 1;
 		goto cleanup;
+#endif
 	}
 
 	signal(SIGINT, sig_handler);
@@ -263,6 +324,9 @@ int main(int argc, char **argv)
 
 	/* Get traces from info map and print them to stdout */
 	print_map(obj);
+	
+	/* Print histogram of off-CPU times */
+	print_histogram(obj);
 
 cleanup:
 	blaze_symbolizer_free(symbolizer);

@@ -14,15 +14,6 @@ USERSPACE_CFLAGS := -g -Wall -fno-omit-frame-pointer -I/usr/include
 USERSPACE_LINKER_FLAGS := -lbpf -lelf -lz -lpthread -lm -lrt -ldl
 BPF_CFLAGS := -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH)
 
-# Check if blazesym is available
-CARGO ?= $(shell which cargo)
-ifeq ($(strip $(CARGO)),)
-	BZS_AVAILABLE := 0
-	USERSPACE_CFLAGS += -DNO_BLAZESYM
-else
-	BZS_AVAILABLE := 1
-endif
-
 # Get Clang's default includes on this system
 CLANG_BPF_SYS_INCLUDES ?= $(shell $(CLANG) -v -E - </dev/null 2>&1 \
 	| sed -n '/<...> search starts here:/,/End of search list./{ s| \(/.*\)|-idirafter \1|p }')

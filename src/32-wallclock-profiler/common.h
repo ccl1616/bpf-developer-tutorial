@@ -9,7 +9,43 @@
 #include <errno.h>
 #include <stdint.h>
 #include <sys/types.h>
+#ifdef NO_BLAZESYM
+// Stub definitions when blazesym is not available
+typedef struct blaze_symbolizer blaze_symbolizer;
+typedef struct blaze_syms blaze_syms;
+typedef struct blaze_sym blaze_sym;
+typedef struct blaze_symbolize_src_process blaze_symbolize_src_process;
+typedef struct blaze_symbolize_src_kernel blaze_symbolize_src_kernel;
+
+static inline blaze_symbolizer *blaze_symbolizer_new(void) {
+    return NULL;
+}
+
+static inline void blaze_symbolizer_free(blaze_symbolizer *symbolizer) {
+    (void)symbolizer;
+}
+
+static inline const blaze_syms *blaze_symbolize_process_abs_addrs(
+    blaze_symbolizer *symbolizer, const blaze_symbolize_src_process *src,
+    const uint64_t *addrs, size_t addr_cnt) {
+    (void)symbolizer; (void)src; (void)addrs; (void)addr_cnt;
+    return NULL;
+}
+
+static inline const blaze_syms *blaze_symbolize_kernel_abs_addrs(
+    blaze_symbolizer *symbolizer, const blaze_symbolize_src_kernel *src,
+    const uint64_t *addrs, size_t addr_cnt) {
+    (void)symbolizer; (void)src; (void)addrs; (void)addr_cnt;
+    return NULL;
+}
+
+static inline void blaze_syms_free(const blaze_syms *syms) {
+    (void)syms;
+}
+
+#else
 #include "blazesym.h"
+#endif
 
 /* Types needed for both profile and offcputime */
 #define TASK_COMM_LEN		16
@@ -78,6 +114,15 @@ static inline int str_to_int(const char *src, void *dest)
  */
 static void show_stack_trace(blaze_symbolizer *symbolizer, __u64 *stack, int stack_sz, pid_t pid)
 {
+#ifdef NO_BLAZESYM
+    // Fallback: just show addresses when blazesym is not available
+    int i;
+    for (i = 0; i < stack_sz; i++) {
+        if (!stack[i])
+            continue;
+        printf("    0x%llx\n", (unsigned long long)stack[i]);
+    }
+#else
     const struct blaze_syms *syms;
     int i;
 
@@ -122,6 +167,7 @@ static void show_stack_trace(blaze_symbolizer *symbolizer, __u64 *stack, int sta
     }
 
     blaze_syms_free(syms);
+#endif
 }
 
 /**
@@ -136,6 +182,33 @@ static void show_stack_trace(blaze_symbolizer *symbolizer, __u64 *stack, int sta
 static void show_stack_trace_folded(blaze_symbolizer *symbolizer, __u64 *stack, int stack_sz,
                                     pid_t pid, char separator, bool reverse)
 {
+#ifdef NO_BLAZESYM
+    // Fallback: just show addresses when blazesym is not available
+    int i;
+    bool first = true;
+    
+    if (reverse) {
+        for (i = stack_sz - 1; i >= 0; i--) {
+            if (!stack[i])
+                continue;
+            if (!first) {
+                printf("%c", separator);
+            }
+            printf("0x%llx", (unsigned long long)stack[i]);
+            first = false;
+        }
+    } else {
+        for (i = 0; i < stack_sz; i++) {
+            if (!stack[i])
+                continue;
+            if (!first) {
+                printf("%c", separator);
+            }
+            printf("0x%llx", (unsigned long long)stack[i]);
+            first = false;
+        }
+    }
+#else
     const struct blaze_syms *syms;
     int i;
     bool first = true;
@@ -210,6 +283,7 @@ static void show_stack_trace_folded(blaze_symbolizer *symbolizer, __u64 *stack, 
     }
 
     blaze_syms_free(syms);
+#endif
 }
 
 /* Safe string duplication */

@@ -21,7 +21,7 @@
 #include <string.h>
 #include "oncputime.h"
 #include "oncputime.skel.h"
-#include "blazesym.h"
+#include "common.h"
 #include "arg_parse.h"
 
 #define SYM_INFO_LEN			2048

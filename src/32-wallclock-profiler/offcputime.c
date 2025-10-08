@@ -10,6 +10,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <string.h>
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include "offcputime.h"
@@ -29,6 +30,17 @@ static void sig_handler(int sig)
 }
 
 static blaze_symbolizer *symbolizer;
+
+static void generate_distribution_string(int count, char *buf, size_t buf_len)
+{
+	int max_stars = (int)buf_len - 3; /* leading '|' + trailing '|' + '\0' */
+	int n = count < max_stars ? count : max_stars;
+	buf[0] = '|';
+	if (n > 0)
+		memset(buf + 1, '*', n);
+	buf[1 + n] = '|';
+	buf[2 + n] = '\0';
+}
 
 static void print_histogram(struct offcputime_bpf *obj)
 {
@@ -71,19 +83,27 @@ static void print_histogram(struct offcputime_bpf *obj)
 		if (bucket > max_bucket)
 			max_bucket = bucket;
 	}
+	// calculate total number of threads
+	int total_threads = 0;
+	for (i = 0; i <= max_bucket; i++)
+		total_threads += histogram[i];
 
 	/* Print histogram */
 	printf("\nOff-CPU Time Histogram (log2 ranges in microseconds):\n");
-	printf("usecs               : count\n");
+	printf("usecs               	: count		distribution 				\n");
 	
 	for (i = 0; i <= max_bucket; i++) {
 		__u64 range_start = (i == 0) ? 0 : (1ULL << (i - 1));
 		__u64 range_end = (1ULL << i) - 1;
-		
-		printf("%-10llu -> %-10llu : %d\n", 
-		       (unsigned long long)range_start, 
-		       (unsigned long long)range_end, 
-		       histogram[i]);
+		int bar_len = total_threads ? (histogram[i] * 40) / total_threads : 0;
+		char bar[64];
+		generate_distribution_string(bar_len, bar, sizeof(bar));
+
+		printf("%-10llu -> %-10llu : %d 		%s\n",
+			(unsigned long long)range_start,
+			(unsigned long long)range_end,
+			histogram[i],
+			bar);
 	}
 }
 

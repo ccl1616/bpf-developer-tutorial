@@ -374,3 +374,10 @@ By visualizing both types of time in a single flame graph with color coding, you
 - eBPF Performance Analysis (SIGCOMM'24): <https://www.brendangregg.com/Slides/SIGCOMM2024_eBPF_Performance.pdf>
 
 > The original link of this article: <https://eunomia.dev/tutorials/32-wallclock-profiler>
+
+Side notes:
+
+kill running test_combined with its PID
+```
+kill -TERM <pid>
+```

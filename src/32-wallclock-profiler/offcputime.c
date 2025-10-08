@@ -33,13 +33,24 @@ static blaze_symbolizer *symbolizer;
 
 static void generate_distribution_string(int count, char *buf, size_t buf_len)
 {
-	int max_stars = (int)buf_len - 3; /* leading '|' + trailing '|' + '\0' */
-	int n = count < max_stars ? count : max_stars;
+	const int max_stars = 40;
+	int stars = count < max_stars ? count : max_stars;
+	
 	buf[0] = '|';
-	if (n > 0)
-		memset(buf + 1, '*', n);
-	buf[1 + n] = '|';
-	buf[2 + n] = '\0';
+	
+	/* Fill stars */
+	int i;
+	for (i = 1; i <= stars; i++) {
+		buf[i] = '*';
+	}
+	
+	/* Fill spaces to reach fixed width */
+	for (; i <= max_stars; i++) {
+		buf[i] = ' ';
+	}
+	
+	buf[max_stars + 1] = '|';
+	buf[max_stars + 2] = '\0';
 }
 
 static void print_histogram(struct offcputime_bpf *obj)
@@ -49,6 +60,7 @@ static void print_histogram(struct offcputime_bpf *obj)
 	struct val_t val;
 	int histogram[64] = {0}; // Support up to 2^63 microseconds
 	int max_bucket = 0;
+	int max_count = 0;
 	int i;
 
 	fd_info = bpf_map__fd(obj->maps.info);
@@ -80,14 +92,12 @@ static void print_histogram(struct offcputime_bpf *obj)
 			bucket = 63;
 			
 		histogram[bucket]++;
+		if (histogram[bucket] > max_count)
+			max_count = histogram[bucket];
 		if (bucket > max_bucket)
 			max_bucket = bucket;
 	}
-	// calculate total number of threads
-	int total_threads = 0;
-	for (i = 0; i <= max_bucket; i++)
-		total_threads += histogram[i];
-
+	
 	/* Print histogram */
 	printf("\nOff-CPU Time Histogram (log2 ranges in microseconds):\n");
 	printf("usecs               	: count		distribution 				\n");
@@ -95,7 +105,15 @@ static void print_histogram(struct offcputime_bpf *obj)
 	for (i = 0; i <= max_bucket; i++) {
 		__u64 range_start = (i == 0) ? 0 : (1ULL << (i - 1));
 		__u64 range_end = (1ULL << i) - 1;
-		int bar_len = total_threads ? (histogram[i] * 40) / total_threads : 0;
+		
+		/* Scale bar length to max 40 stars based on max_count */
+		int bar_len = 0;
+		if (max_count > 0) {
+			bar_len = (histogram[i] * 40 + max_count - 1) / max_count;
+			if (histogram[i] > 0 && bar_len == 0)
+				bar_len = 1;
+		}
+		
 		char bar[64];
 		generate_distribution_string(bar_len, bar, sizeof(bar));
 
